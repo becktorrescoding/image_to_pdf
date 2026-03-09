@@ -1,4 +1,6 @@
 import os
+import re
+
 import ocrmypdf
 import pytesseract
 from PIL import Image
@@ -303,14 +305,161 @@ class ImageToPDFApp:
 
         return partial_matched_files
 
+    def generate_filename(self, text, fallback_stem):
+        """
+        Generate a structured filename from OCR text.
+
+        Degree format:    LastName_FirstName_MI_Degree_DateOfGraduation
+        Transcript format: LastName_FirstName_MI_Transcript_DateOfAdmission
+
+        Falls back to original filename if fields cannot be extracted.
+        """
+
+        def clean(value):
+            """Remove characters that are invalid in filenames."""
+            return re.sub(r'[\\/*?:"<>|,]', '', value).strip()
+
+        # --- Detect document type ---
+        is_degree = bool(re.search(r'degree\s+received', text, re.IGNORECASE))
+        is_transcript = bool(re.search(r'date\s+of\s+admission', text, re.IGNORECASE))
+
+        if not is_degree and not is_transcript:
+            self.log(f"  ⚠ Could not detect document type — using original filename.")
+            return fallback_stem
+
+        doc_type = "Degree" if is_degree else "Transcript"
+
+        # --- Extract name ---
+        # Tries "Last, First MI" format first, then "First MI Last"
+        last, first, middle = "", "", ""
+
+        # Format 1: Last, First [MI]
+        name_match = re.search(
+            r'\b([A-Z][a-zA-Z\'\-]+),\s+([A-Z][a-zA-Z\'\-]+)(?:\s+([A-Z])\.?)?',
+            text
+        )
+        if name_match:
+            last  = name_match.group(1)
+            first = name_match.group(2)
+            middle = name_match.group(3) or ""
+        else:
+            # Format 2: First [MI] Last
+            name_match = re.search(
+                r'\b([A-Z][a-zA-Z\'\-]+)(?:\s+([A-Z])\.?)?\s+([A-Z][a-zA-Z\'\-]+)\b',
+                text
+            )
+            if name_match:
+                first  = name_match.group(1)
+                middle = name_match.group(2) or ""
+                last   = name_match.group(3)
+
+        if not last or not first:
+            self.log(f"  ⚠ Could not extract name — using original filename.")
+            return fallback_stem
+
+        # --- Extract degree (only for degree documents) ---
+        degree_name = ""
+        if is_degree:
+            degree_match = re.search(
+                r'degree\s+received[:\s]+([A-Za-z\s]+?)(?:\n|$)',
+                text,
+                re.IGNORECASE
+            )
+            if degree_match:
+                degree_name = clean(degree_match.group(1)).replace(" ", "_")
+            else:
+                self.log(f"  ⚠ Could not extract degree name.")
+
+        # --- Extract date ---
+        # Matches "June 12, 1979", "Jun 12 1979", "06/12/79", "06/12/1979"
+        MONTH_NAME = (
+            r'(?:January|February|March|April|May|June|July|August|'
+            r'September|October|November|December|'
+            r'Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
+        )
+        DATE_NAMED   = MONTH_NAME + r'\s+\d{1,2},?\s+\d{4}'
+        DATE_NUMERIC = r'\d{1,2}/\d{1,2}/\d{2,4}'
+
+        MONTH_MAP = {
+            'jan': 'January', 'feb': 'February', 'mar': 'March',
+            'apr': 'April',   'may': 'May',       'jun': 'June',
+            'jul': 'July',    'aug': 'August',     'sep': 'September',
+            'oct': 'October', 'nov': 'November',   'dec': 'December'
+        }
+
+        def normalise_date(raw):
+            """Convert any matched date string to Month_DD_YYYY."""
+            raw = raw.strip()
+            # Numeric format: mm/dd/yy or mm/dd/yyyy
+            numeric = re.match(r'(\d{1,2})/(\d{1,2})/(\d{2,4})$', raw)
+            if numeric:
+                month_num, day, year = int(numeric.group(1)), numeric.group(2), numeric.group(3)
+                if len(year) == 2:
+                    year = '19' + year if int(year) >= 20 else '20' + year
+                month_name = list(MONTH_MAP.values())[month_num - 1]
+                return f"{month_name}_{day}_{year}"
+            # Named format: "June 12, 1979" or "Jun 12 1979"
+            parts = raw.replace(',', '').split()
+            if len(parts) == 3:
+                month_abbr = parts[0][:3].lower()
+                month_name = MONTH_MAP.get(month_abbr, parts[0])
+                return f"{month_name}_{parts[1]}_{parts[2]}"
+            return clean(raw).replace(' ', '_')
+
+        date = ""
+        if is_degree:
+            # Date of graduation appears to the right of the degree on the same line
+            date_match = re.search(
+                r'degree\s+received[^\n]*?(' + DATE_NAMED + r'|' + DATE_NUMERIC + r')',
+                text,
+                re.IGNORECASE
+            )
+        else:
+            # Date of admission appears under "Date of Admission" label
+            date_match = re.search(
+                r'date\s+of\s+admission[:\s]+(' + DATE_NAMED + r'|' + DATE_NUMERIC + r')',
+                text,
+                re.IGNORECASE
+            )
+
+        if date_match:
+            date = normalise_date(date_match.group(1))
+        else:
+            self.log(f"  ⚠ Could not extract date.")
+
+        # --- Assemble filename ---
+        parts = [last, first]
+        if middle:
+            parts.append(middle)
+        if is_degree and degree_name:
+            parts.append(degree_name)
+        else:
+            parts.append(doc_type)
+        if date:
+            parts.append(date)
+
+        filename = "_".join(clean(p) for p in parts)
+        self.log(f"  📄 Generated filename: {filename}.pdf")
+        return filename
+
     def convert_image(self, image_path):
-        """Convert single image to PDF"""
+        """Convert single image to PDF with auto-generated filename."""
         try:
             img_path = Path(image_path)
             output_folder = Path(self.output_path.get())
-            output_file = output_folder / f"{img_path.stem}.pdf"
 
             self.log(f"Converting {img_path.name} to PDF...")
+
+            # Extract text and generate filename
+            text = pytesseract.image_to_string(Image.open(img_path))
+            output_stem = self.generate_filename(text, img_path.stem)
+            output_file = output_folder / f"{output_stem}.pdf"
+
+            # Avoid overwriting existing files
+            counter = 1
+            while output_file.exists():
+                output_file = output_folder / f"{output_stem}_{counter}.pdf"
+                counter += 1
 
             ocrmypdf.ocr(
                 img_path,
