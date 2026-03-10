@@ -59,7 +59,6 @@ pip install ocrmypdf pytesseract pillow
 
 ![screenshot.png](screenshot.png)
 
-
 ### Main Interface
 The application features a clean, intuitive interface:
 - **Folder Selection**: Browse buttons for easy path selection
@@ -108,10 +107,6 @@ The application features a clean, intuitive interface:
 python image_to_pdf.py
 ```
 
-A graphical window will open with the following interface:
-
-![screenshot.png](screenshot.png)
-
 ---
 
 ### Step-by-Step Usage
@@ -139,13 +134,23 @@ The Processing Log window shows real-time status.
 ```
 === Starting Search Mode ===
 Searching for John Smith
-Match found: scan_001.jpg
+Scanning 86 file(s)...
+  Scanning 1/86: scan_001.jpg
+  Scanning 2/86: scan_002.jpg
+  ✓ Match found: scan_002.jpg
+  Scanning 3/86: scan_003.jpg
+...
 No exact matches found. Trying partial match...
-Partial match found: scan_002.jpg
+Scanning 86 file(s) for partial matches...
+  Scanning 1/86: scan_001.jpg
+  Scanning 2/86: scan_002.jpg
+  ✓ Partial match found: scan_002.jpg
+...
 Filtering by year: 98
 Found 1 matching file(s).
 Converting scan_002.jpg to PDF...
-✓ Successfully converted to: scan_002.pdf
+  📄 Generated filename: Smith_John_Transcript_March_3_1975.pdf
+✓ Successfully converted to: Smith_John_Transcript_March_3_1975.pdf
 Search and conversion complete!
 ```
 
