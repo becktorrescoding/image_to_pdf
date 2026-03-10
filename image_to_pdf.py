@@ -22,7 +22,7 @@ class ImageToPDFApp:
         self.search_name = tk.StringVar()
         self.search_year = tk.StringVar()
         self.mode = tk.StringVar(value="search")  # ADDED for mode selection
-        self.valid_ext = ('.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.TIF', '.tiff', '.tif')
+        self.valid_ext = ('.jpg', '.jpeg', '.png', '.bmp', '.TIF', '.tiff', '.tif')
 
         self.create_widgets()
 
@@ -229,9 +229,18 @@ class ImageToPDFApp:
                     img_path = Path(root) / file
 
                     try:
-                        output_file = output_folder / f"{img_path.stem}.pdf"
-
                         self.log(f"Converting: {file}")
+
+                        # Extract text and generate structured filename
+                        text = pytesseract.image_to_string(Image.open(img_path))
+                        output_stem = self.generate_filename(text, img_path.stem)
+                        output_file = output_folder / f"{output_stem}.pdf"
+
+                        # Avoid overwriting existing files
+                        counter = 1
+                        while output_file.exists():
+                            output_file = output_folder / f"{output_stem}_{counter}.pdf"
+                            counter += 1
 
                         ocrmypdf.ocr(
                             img_path,
