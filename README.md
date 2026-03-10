@@ -57,6 +57,9 @@ pip install ocrmypdf pytesseract pillow
 
 ## Screenshots
 
+![screenshot.png](screenshot.png)
+
+
 ### Main Interface
 The application features a clean, intuitive interface:
 - **Folder Selection**: Browse buttons for easy path selection
@@ -106,6 +109,8 @@ python image_to_pdf.py
 ```
 
 A graphical window will open with the following interface:
+
+![screenshot.png](screenshot.png)
 
 ---
 
