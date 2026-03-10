@@ -1,6 +1,5 @@
 import os
 import re
-
 import ocrmypdf
 import pytesseract
 from PIL import Image
@@ -13,7 +12,7 @@ class ImageToPDFApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Image to PDF Converter")
-        self.root.geometry("1000x900")
+        self.root.geometry("700x600")
         self.root.resizable(width=False, height=False)
 
         # Variables
@@ -22,7 +21,7 @@ class ImageToPDFApp:
         self.search_name = tk.StringVar()
         self.search_year = tk.StringVar()
         self.mode = tk.StringVar(value="search")  # ADDED for mode selection
-        self.valid_ext = ('.jpg', '.jpeg', '.png', '.bmp', '.TIF', '.tiff', '.tif')
+        self.valid_ext = ('.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.TIF', '.tiff', '.tif')
 
         self.create_widgets()
 
@@ -268,49 +267,57 @@ class ImageToPDFApp:
 
         messagebox.showinfo("Complete", f"Converted {converted} of {total_files} file(s).\n{errors} error(s).")
 
-    def search_folders(self, folder_path, search_for):  # FIXED
-        """Search for exact text match"""
+    def search_folders(self, folder_path, search_for):
+        """Search for exact text match with progress indicator."""
         matched_files = []
 
-        for root, dirs, files in os.walk(folder_path):
-            for file in files:
-                if file.lower().endswith(self.valid_ext):
-                    img_path = os.path.join(root, file)
+        all_files = [
+            os.path.join(root, file)
+            for root, dirs, files in os.walk(folder_path)
+            for file in files
+            if file.lower().endswith(self.valid_ext)
+        ]
+        total = len(all_files)
+        self.log(f"Scanning {total} file(s)...")
 
-                    try:
-                        # Use pytesseract instead of open()
-                        text = pytesseract.image_to_string(Image.open(img_path))
-
-                        if search_for.lower() in text.lower():
-                            matched_files.append(img_path)  # FIXED: Full path not just filename
-                            self.log(f"Match found: {file}")
-
-                    except Exception as e:
-                        self.log(f"Error processing {file}: {e}")
+        for i, img_path in enumerate(all_files, start=1):
+            file = os.path.basename(img_path)
+            self.log(f"  Scanning {i}/{total}: {file}")
+            try:
+                text = pytesseract.image_to_string(Image.open(img_path))
+                if search_for.lower() in text.lower():
+                    matched_files.append(img_path)
+                    self.log(f"  ✓ Match found: {file}")
+            except Exception as e:
+                self.log(f"  ✗ Error processing {file}: {e}")
 
         return matched_files
 
     def search_fallback(self, folder_path, search_for):
-        """Partial keyword matching"""
+        """Partial keyword matching with progress indicator."""
         keywords = search_for.split()
         partial_matched_files = []
 
-        for root, dirs, files in os.walk(folder_path):
-            for file in files:
-                if file.lower().endswith(self.valid_ext):
-                    img_path = os.path.join(root, file)
+        all_files = [
+            os.path.join(root, file)
+            for root, dirs, files in os.walk(folder_path)
+            for file in files
+            if file.lower().endswith(self.valid_ext)
+        ]
+        total = len(all_files)
+        self.log(f"Scanning {total} file(s) for partial matches...")
 
-                    try:
-                        # Use pytesseract instead of open()
-                        text = pytesseract.image_to_string(Image.open(img_path))
-                        matched_words = [word for word in keywords if word.lower() in text.lower()]
-
-                        if len(matched_words) >= (len(keywords) / 2) and len(keywords) > 1:
-                            partial_matched_files.append(img_path)
-                            self.log(f"Partial match found: {file}")
-
-                    except Exception as e:
-                        self.log(f"Error processing {file}: {e}")
+        for i, img_path in enumerate(all_files, start=1):
+            file = os.path.basename(img_path)
+            self.log(f"  Scanning {i}/{total}: {file}")
+            try:
+                text = pytesseract.image_to_string(Image.open(img_path))
+                matched_words = [word for word in keywords if word.lower() in text.lower()]
+                if len(matched_words) >= (len(keywords) / 2) and len(keywords) > 1:
+                    partial_matched_files.append(img_path)
+                    self.log(f"  ✓ Partial match found: {file}")
+            except Exception as e:
+                self.log(f"  ✗ Error processing {file}: {e}")
 
         return partial_matched_files
 
@@ -484,7 +491,7 @@ class ImageToPDFApp:
             self.log(f"✗ Error converting {image_path}: {e}")
 
     def search_images(self, matched_files, date):
-        """Filter by year"""
+        """Filter by year - This one was correct!"""
         files = []
 
         for file in matched_files:
