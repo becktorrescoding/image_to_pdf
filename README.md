@@ -22,42 +22,110 @@ A Python GUI application that combines OCR-based document search with image-to-P
 
 ### Required Software
 
-1. **Python 3.7+**
-2. **Tesseract OCR** - Install from [tesseract-ocr](https://github.com/tesseract-ocr/tesseract)
-   - Windows: Download installer from GitHub releases
-   - macOS: `brew install tesseract`
-   - Linux: `sudo apt-get install tesseract-ocr`
+1. **Python 3.7+** — Download from [python.org](https://www.python.org/downloads/)
+2. **Tesseract OCR** — See installation instructions below
+3. **Python packages** — `ocrmypdf`, `pytesseract`, `pillow`
 
-### Python Dependencies
+---
 
-Install required packages:
+## Installation
+
+### 1. Clone or Download this Repository
+
+```bash
+git clone https://github.com/becktorrescoding/image_to_pdf
+```
+Or download and extract the ZIP from the GitHub page.
+
+---
+
+### 2. Install Tesseract OCR
+
+#### Windows
+
+1. Download the latest installer from the [Tesseract at UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) page (recommended over the official releases for Windows)
+2. Run the installer — note the installation path, which defaults to:
+   ```
+   C:\Users\%USERNAME%\AppData\Local\Programs\Tesseract-OCR\
+   ```
+3. **Add Tesseract to your PATH:**
+   - Open the **Start Menu** and search for `Environment Variables`
+   - Click **"Edit the system environment variables"**
+   - In the System Properties window click **"Environment Variables..."**
+   - Under **"System variables"**, find and select **`Path`**, then click **"Edit..."**
+   - Click **"New"** and add the Tesseract installation path:
+     ```
+     C:\Users\%USERNAME%\AppData\Local\Programs\Tesseract-OCR\
+     ```
+   - Click **OK** on all windows to save
+4. **Verify the installation** by opening a new Command Prompt and running:
+   ```bash
+   tesseract --version
+   ```
+   You should see the Tesseract version number printed.
+
+> **Note**: If you see a `TesseractNotFoundError` when running the app, you can alternatively set the path directly in `image_to_pdf.py` by adding this line near the top of the file:
+> ```python
+> pytesseract.pytesseract.tesseract_cmd = r'C:\Users\%USERNAME%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
+> ```
+
+---
+
+#### macOS
+
+1. Install [Homebrew](https://brew.sh) if you don't have it already:
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+2. Install Tesseract:
+   ```bash
+   brew install tesseract
+   ```
+3. Homebrew automatically adds Tesseract to your PATH. **Verify the installation:**
+   ```bash
+   tesseract --version
+   ```
+   You should see the Tesseract version number printed.
+
+> **Note**: If the command is not found after installing, add Homebrew's bin directory to your PATH manually by adding this line to your `~/.zshrc` or `~/.bash_profile`:
+> ```bash
+> export PATH="/usr/local/bin:$PATH"
+> ```
+> Then run `source ~/.zshrc` (or `source ~/.bash_profile`) and try again.
+
+---
+
+#### Linux (Debian/Ubuntu)
+
+1. Update your package list and install Tesseract:
+   ```bash
+   sudo apt-get update
+   sudo apt-get install tesseract-ocr
+   ```
+2. Tesseract is automatically added to your PATH. **Verify the installation:**
+   ```bash
+   tesseract --version
+   ```
+   You should see the Tesseract version number printed.
+
+> **Note**: For other distributions use the equivalent package manager, e.g. `sudo dnf install tesseract` on Fedora or `sudo pacman -S tesseract` on Arch.
+
+---
+
+### 3. Install Python Dependencies
 
 ```bash
 pip install ocrmypdf pytesseract pillow
 ```
 
-## Installation
+### 4. Launch the Application
 
-1. **Clone or download this repository**
+```bash
+python image_to_pdf.py
+```
 
-2. **Install Tesseract OCR** - Download from [tesseract-ocr](https://github.com/tesseract-ocr/tesseract)
-   - Windows: Download installer from GitHub releases
-   - macOS: `brew install tesseract`
-   - Linux: `sudo apt-get install tesseract-ocr`
-
-3. **Install Python dependencies:**
-   ```bash
-   pip install ocrmypdf pytesseract pillow
-   ```
-
-4. **Launch the GUI:**
-   ```bash
-   python image_to_pdf.py
-   ```
 
 ## Screenshots
-
-![screenshot.png](screenshot.png)
 
 ### Main Interface
 The application features a clean, intuitive interface:
@@ -106,6 +174,8 @@ The application features a clean, intuitive interface:
 ```bash
 python image_to_pdf.py
 ```
+
+A graphical window will open with the following interface:
 
 ---
 
@@ -401,14 +471,15 @@ This makes the tool suitable for handling sensitive documents such as university
 - Verify tkinter is installed: `python -m tkinter` (should open test window)
 
 ### "Tesseract not found" Error
-**Symptom**: Error dialog when clicking "Start Search"
+**Symptom**: `TesseractNotFoundError` when clicking "Start Search"
 **Solutions**:
-- Ensure Tesseract OCR is installed
-- Add Tesseract to system PATH
-- **Windows**: Manually set path in code:
+- Ensure Tesseract OCR is installed — see the [Installation](#installation) section for your OS
+- Open a terminal and run `tesseract --version` to confirm it's on your PATH
+- **Windows**: If it's still not found after adding to PATH, open a fresh Command Prompt (the old one won't pick up the change) and try again. Alternatively, set the path directly in `image_to_pdf.py`:
   ```python
-  pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+  pytesseract.pytesseract.tesseract_cmd = r'C:\Users\%USERNAME%\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
   ```
+- **macOS**: Run `source ~/.zshrc` or `source ~/.bash_profile` after updating PATH, then retry
 
 ### OCRmyPDF Errors
 **Symptom**: PDF conversion fails
