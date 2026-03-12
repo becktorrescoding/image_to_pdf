@@ -225,6 +225,7 @@ class ImageToPDFApp:
         for root, dirs, files in os.walk(input_folder):
             for file in files:
                 if file.lower().endswith(self.valid_ext):
+                    os.rename(file, file.replace("#", ""))
                     img_path = Path(root) / file
 
                     try:
