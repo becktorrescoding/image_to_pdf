@@ -4,6 +4,7 @@ import ocrmypdf
 import pytesseract
 from PIL import Image
 from pathlib import Path
+from pdf2image import convert_from_path
 import tkinter as tk
 import threading
 from tkinter import filedialog, messagebox, scrolledtext
@@ -12,7 +13,7 @@ class ImageToPDFApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Image to PDF Converter")
-        self.root.geometry("700x600")
+        self.root.geometry("1000x900")
         self.root.resizable(width=True, height=True)
 
         # Variables
@@ -22,6 +23,11 @@ class ImageToPDFApp:
         self.search_year = tk.StringVar()
         self.mode = tk.StringVar(value="search")  # ADDED for mode selection
         self.valid_ext = ('.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.TIF', '.tiff', '.tif')
+
+        # Pause / stop control
+        self._pause_event = threading.Event()
+        self._pause_event.set()   # set = not paused
+        self._stop_event  = threading.Event()
 
         self.create_widgets()
 
@@ -87,18 +93,47 @@ class ImageToPDFApp:
         tk.Label(self.search_frame, text="Year (Optional):", font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=5)
         tk.Entry(self.search_frame, textvariable=self.search_year, width=10).grid(row=1, column=1, padx=5, sticky="w")
 
-        # Start Button
+        # Button row: Start | Pause | Stop
+        btn_frame = tk.Frame(self.root)
+        btn_frame.pack(pady=5)
+
         self.start_button = tk.Button(
-            self.root,
+            btn_frame,
             text="Start Search",
-            command=self.start_search,  # YOUR function name
+            command=self.start_search,
             bg="green",
             fg="white",
             font=("Arial", 11, "bold"),
-            width=20,
+            width=14,
             height=2
         )
-        self.start_button.pack(pady=5)
+        self.start_button.pack(side="left", padx=5)
+
+        self.pause_button = tk.Button(
+            btn_frame,
+            text="Pause",
+            command=self.toggle_pause,
+            bg="#e67e00",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            width=10,
+            height=2,
+            state="disabled"
+        )
+        self.pause_button.pack(side="left", padx=5)
+
+        self.stop_button = tk.Button(
+            btn_frame,
+            text="Stop",
+            command=self.request_stop,
+            bg="#c0392b",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            width=10,
+            height=2,
+            state="disabled"
+        )
+        self.stop_button.pack(side="left", padx=5)
 
         # Processing Log
         log_frame = tk.Frame(self.root, padx=20, pady=10)
@@ -108,6 +143,41 @@ class ImageToPDFApp:
 
         self.log_text = scrolledtext.ScrolledText(log_frame, height=10, width=70)
         self.log_text.pack(fill="both", expand=True)
+
+    def _reset_buttons(self):
+        """Re-enable Start and disable Pause/Stop — always called from main thread."""
+        self.start_button.config(state="normal")
+        self.pause_button.config(state="disabled", text="Pause", bg="#e67e00")
+        self.stop_button.config(state="disabled")
+        self._pause_event.set()
+        self._stop_event.clear()
+
+    def toggle_pause(self):
+        """Pause or resume processing."""
+        if self._pause_event.is_set():
+            self._pause_event.clear()
+            self.pause_button.config(text="Resume", bg="#27ae60")
+            self.log("⏸ Paused — click Resume to continue.")
+        else:
+            self._pause_event.set()
+            self.pause_button.config(text="Pause", bg="#e67e00")
+            self.log("▶ Resumed.")
+
+    def request_stop(self):
+        """Signal the worker thread to stop after the current file."""
+        self._stop_event.set()
+        self._pause_event.set()   # unblock if paused so thread can exit
+        self.pause_button.config(state="disabled")
+        self.stop_button.config(state="disabled")
+        self.log("⏹ Stop requested — finishing current file...")
+
+    def _check_pause_stop(self):
+        """
+        Call this between files in any processing loop.
+        Blocks while paused. Returns True if a stop has been requested.
+        """
+        self._pause_event.wait()   # blocks until event is set (i.e. not paused)
+        return self._stop_event.is_set()
 
     def toggle_mode(self):
         """Show/hide search options based on mode"""
@@ -148,10 +218,14 @@ class ImageToPDFApp:
                 messagebox.showerror("Error", "Please enter a name to search for.")
                 return
 
-        # Start processing in thread
+        # Reset and start
+        self._stop_event.clear()
+        self._pause_event.set()
         self.start_button.config(state="disabled")
+        self.pause_button.config(state="normal", text="Pause", bg="#e67e00")
+        self.stop_button.config(state="normal")
 
-        thread = threading.Thread(target=self.do_search)  # YOUR function name
+        thread = threading.Thread(target=self.do_search)
         thread.daemon = True
         thread.start()
 
@@ -160,6 +234,9 @@ class ImageToPDFApp:
         try:
             if self.mode.get() == "search":
                 self.search_mode()
+                # Search mode: buttons re-enabled by preview window on close,
+                # or immediately below if nothing was found / stopped early.
+                return
             else:
                 self.bulk_convert_mode()
 
@@ -168,7 +245,9 @@ class ImageToPDFApp:
             messagebox.showerror("Error", str(e))
 
         finally:
-            self.start_button.config(state="normal")
+            # Always reset for bulk mode; search mode resets via preview close
+            if self.mode.get() != "search":
+                self.root.after(0, self._reset_buttons)
 
     def search_mode(self):
         """Search for specific documents"""
@@ -189,14 +268,16 @@ class ImageToPDFApp:
             self.log(f"Filtering by year: {year}")
             matched_files = self.search_images(matched_files, year)
 
-        if matched_files:
-            self.log(f"Found {len(matched_files)} matching file(s).")
-            self.convert_image(matched_files[0])
-            self.log("Search and conversion complete!")
-            messagebox.showinfo("Success", "Image successfully converted to PDF")
+        if matched_files and not self._stop_event.is_set():
+            self.log(f"Found {len(matched_files)} matching file(s). Opening preview...")
+            self.root.after(0, lambda: self.show_preview_window(matched_files))
         else:
-            self.log("No matching files found.")
-            messagebox.showinfo("No Results", "No matching documents found.")
+            if self._stop_event.is_set():
+                self.log("Search stopped — no preview shown.")
+            else:
+                self.log("No matching files found.")
+                messagebox.showinfo("No Results", "No matching documents found.")
+            self.root.after(0, self._reset_buttons)
 
     def bulk_convert_mode(self):
         """Convert all images to PDFs"""
@@ -222,9 +303,16 @@ class ImageToPDFApp:
         self.log("")
 
         # Convert each file
+        stopped = False
         for root, dirs, files in os.walk(input_folder, followlinks=False):
+            if stopped:
+                break
             for file in files:
                 if file.lower().endswith(self.valid_ext):
+                    if self._check_pause_stop():
+                        self.log("⏹ Stopped by user.")
+                        stopped = True
+                        break
                     img_path = Path(root) / file
 
                     try:
@@ -263,12 +351,138 @@ class ImageToPDFApp:
 
         # Summary
         self.log("=" * 50)
-        self.log(f"Bulk conversion complete!")
+        if stopped:
+            self.log("Bulk conversion stopped by user.")
+        else:
+            self.log("Bulk conversion complete!")
         self.log(f"Successfully converted: {converted}/{total_files}")
         self.log(f"Errors: {errors}")
         self.log("=" * 50)
 
-        messagebox.showinfo("Complete", f"Converted {converted} of {total_files} file(s).\n{errors} error(s).")
+        label = "Stopped" if stopped else "Complete"
+        messagebox.showinfo(label, f"Converted {converted} of {total_files} file(s).\n{errors} error(s).")
+
+    def show_preview_window(self, matched_files):
+        """
+        Open a preview window showing thumbnails of all matched files.
+        The user selects which ones to convert, then clicks Convert Selected.
+        """
+        import io
+        preview_win = tk.Toplevel(self.root)
+        preview_win.title("Preview Matched Files")
+        preview_win.geometry("780x560")
+        preview_win.resizable(True, True)
+        preview_win.grab_set()
+
+        def on_close():
+            self.root.after(0, self._reset_buttons)
+            preview_win.destroy()
+
+        preview_win.protocol("WM_DELETE_WINDOW", on_close)
+
+        tk.Label(
+            preview_win,
+            text=f"Found {len(matched_files)} match(es) — select files to convert:",
+            font=("Arial", 10, "bold"),
+            pady=8,
+        ).pack(fill="x", padx=15)
+
+        canvas_frame = tk.Frame(preview_win)
+        canvas_frame.pack(fill="both", expand=True, padx=15, pady=(0, 5))
+
+        canvas = tk.Canvas(canvas_frame, bg="#f0f0f0")
+        scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner_frame = tk.Frame(canvas, bg="#f0f0f0")
+        canvas_window = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+
+        def on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        inner_frame.bind("<Configure>", on_frame_configure)
+        canvas.bind("<Configure>", on_canvas_configure)
+
+        THUMB_SIZE = (160, 160)
+        check_vars = []
+        thumb_refs = []
+
+        for idx, file_path in enumerate(matched_files):
+            var = tk.BooleanVar(value=True)
+            check_vars.append(var)
+
+            row = tk.Frame(inner_frame, bg="#f0f0f0", pady=6, padx=8)
+            row.pack(fill="x")
+
+            try:
+                img = Image.open(file_path)
+                img.thumbnail(THUMB_SIZE, Image.Resampling.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="PPM")
+                tk_img = tk.PhotoImage(data=buf.getvalue())
+            except Exception:
+                placeholder = Image.new("RGB", THUMB_SIZE, color=(180, 180, 180))
+                buf = io.BytesIO()
+                placeholder.save(buf, format="PPM")
+                tk_img = tk.PhotoImage(data=buf.getvalue())
+
+            thumb_refs.append(tk_img)
+
+            tk.Label(row, image=tk_img, bg="#f0f0f0", relief="solid", bd=1).pack(side="left", padx=(0, 10))
+
+            info_frame = tk.Frame(row, bg="#f0f0f0")
+            info_frame.pack(side="left", fill="both", expand=True)
+
+            tk.Label(info_frame, text=os.path.basename(file_path),
+                     font=("Arial", 9, "bold"), bg="#f0f0f0", anchor="w", wraplength=480).pack(anchor="w")
+            tk.Label(info_frame, text=file_path,
+                     font=("Arial", 8), fg="#555", bg="#f0f0f0", anchor="w", wraplength=480).pack(anchor="w", pady=(2, 6))
+            tk.Checkbutton(info_frame, text="Include in conversion",
+                           variable=var, bg="#f0f0f0", font=("Arial", 9)).pack(anchor="w")
+
+            tk.Frame(inner_frame, bg="#cccccc", height=1).pack(fill="x", padx=8)
+
+        btn_bar = tk.Frame(preview_win)
+        btn_bar.pack(fill="x", padx=15, pady=(4, 0))
+
+        tk.Button(btn_bar, text="Select All",
+                  command=lambda: [v.set(True) for v in check_vars], width=12).pack(side="left", padx=(0, 5))
+        tk.Button(btn_bar, text="Deselect All",
+                  command=lambda: [v.set(False) for v in check_vars], width=12).pack(side="left")
+
+        action_bar = tk.Frame(preview_win)
+        action_bar.pack(fill="x", padx=15, pady=10)
+
+        def on_convert():
+            selected = [f for f, v in zip(matched_files, check_vars) if v.get()]
+            if not selected:
+                messagebox.showwarning("Nothing Selected", "Please check at least one file to convert.", parent=preview_win)
+                return
+            preview_win.destroy()
+            def run():
+                for f in selected:
+                    self.convert_image(f)
+                self.log(f"Conversion complete — {len(selected)} file(s) converted.")
+                messagebox.showinfo("Success", f"{len(selected)} file(s) successfully converted to PDF.")
+                self.root.after(0, self._reset_buttons)
+            threading.Thread(target=run, daemon=True).start()
+
+        tk.Button(action_bar, text="Convert Selected", command=on_convert,
+                  bg="green", fg="white", font=("Arial", 10, "bold"), width=18, height=2).pack(side="right", padx=(5, 0))
+        tk.Button(action_bar, text="Cancel", command=on_close,
+                  font=("Arial", 10), width=10, height=2).pack(side="right")
+
+    def open_as_image(self, file_path):
+        """Open any supported file as a PIL Image (first page for PDFs)."""
+        if str(file_path).lower().endswith('.pdf'):
+            pages = convert_from_path(file_path, first_page=1, last_page=1)
+            return pages[0]
+        return Image.open(file_path)
 
     def search_folders(self, folder_path, search_for):
         """Search for exact text match with progress indicator."""
@@ -287,7 +501,8 @@ class ImageToPDFApp:
             file = os.path.basename(img_path)
             self.log(f"  Scanning {i}/{total}: {file}")
             try:
-                text = pytesseract.image_to_string(Image.open(img_path))
+                name_crop = self.open_as_image(img_path).crop((337, 203, 727, 261))
+                text = pytesseract.image_to_string(name_crop)
                 if search_for.lower() in text.lower():
                     matched_files.append(img_path)
                     self.log(f"  ✓ Match found: {file}")
@@ -297,9 +512,9 @@ class ImageToPDFApp:
         return matched_files
 
     def search_fallback(self, folder_path, search_for):
-        """Partial keyword matching with progress indicator."""
+        """Partial keyword matching — returns file(s) with the most keyword hits (ties kept)."""
         keywords = search_for.split()
-        partial_matched_files = []
+        scores = {}  # img_path -> matched keyword count
 
         all_files = [
             os.path.join(root, file)
@@ -311,17 +526,28 @@ class ImageToPDFApp:
         self.log(f"Scanning {total} file(s) for partial matches...")
 
         for i, img_path in enumerate(all_files, start=1):
+            if self._check_pause_stop():
+                self.log("⏹ Search stopped by user.")
+                break
             file = os.path.basename(img_path)
             self.log(f"  Scanning {i}/{total}: {file}")
             try:
-                text = pytesseract.image_to_string(Image.open(img_path))
+                name_crop = self.open_as_image(img_path).crop((337, 203, 727, 261))
+                text = pytesseract.image_to_string(name_crop)
                 matched_words = [word for word in keywords if word.lower() in text.lower()]
-                if len(matched_words) >= (len(keywords) / 2) and len(keywords) > 1:
-                    partial_matched_files.append(img_path)
-                    self.log(f"  ✓ Partial match found: {file}")
+                count = len(matched_words)
+                if count > 0:
+                    scores[img_path] = count
+                    self.log(f"  ~ {count}/{len(keywords)} keyword(s) matched: {file}")
             except Exception as e:
                 self.log(f"  ✗ Error processing {file}: {e}")
 
+        if not scores:
+            return []
+
+        best = max(scores.values())
+        partial_matched_files = [f for f, c in scores.items() if c == best]
+        self.log(f"  ✓ Best match: {best}/{len(keywords)} keyword(s) — {len(partial_matched_files)} file(s)")
         return partial_matched_files
 
     def generate_filename(self, name, date, degree, fallback_stem):
