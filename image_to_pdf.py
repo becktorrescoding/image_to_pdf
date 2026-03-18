@@ -258,7 +258,7 @@ class ImageToPDFApp:
         year = self.search_year.get()
 
         self.log(f"Searching for {name}")
-        matched_files = self.search_folders(input_folder, name)
+        matched_files = self.search_fallback(input_folder, name)
 
         if not matched_files:
             self.log("No exact matches found. Trying partial match...")
@@ -483,33 +483,6 @@ class ImageToPDFApp:
             pages = convert_from_path(file_path, first_page=1, last_page=1)
             return pages[0]
         return Image.open(file_path)
-
-    def search_folders(self, folder_path, search_for):
-        """Search for exact text match with progress indicator."""
-        matched_files = []
-
-        all_files = [
-            os.path.join(root, file)
-            for root, dirs, files in os.walk(folder_path, followlinks=False)
-            for file in files
-            if file.lower().endswith(self.valid_ext)
-        ]
-        total = len(all_files)
-        self.log(f"Scanning {total} file(s)...")
-
-        for i, img_path in enumerate(all_files, start=1):
-            file = os.path.basename(img_path)
-            self.log(f"  Scanning {i}/{total}: {file}")
-            try:
-                name_crop = self.open_as_image(img_path).crop((337, 203, 727, 261))
-                text = pytesseract.image_to_string(name_crop)
-                if search_for.lower() in text.lower():
-                    matched_files.append(img_path)
-                    self.log(f"  ✓ Match found: {file}")
-            except Exception as e:
-                self.log(f"  ✗ Error processing {file}: {e}")
-
-        return matched_files
 
     def search_fallback(self, folder_path, search_for):
         """Partial keyword matching — returns file(s) with the most keyword hits (ties kept)."""
