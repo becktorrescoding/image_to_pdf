@@ -1,3 +1,112 @@
+"""
+Image to PDF Converter
+----------------------
+Requires system tools:  tesseract, ghostscript, poppler
+Requires Python pkgs:   ocrmypdf, pytesseract, Pillow, pdf2image
+
+Run the platform installer first if you haven't already:
+  Windows : install_windows.bat
+  macOS   : bash install_macos.sh
+  Linux   : bash install_linux.sh
+"""
+
+import sys
+import subprocess
+import importlib
+
+
+def _check_python_version():
+    if sys.version_info < (3, 9):
+        print(
+            f"ERROR: Python 3.9+ is required (you have {sys.version}).\n"
+            "Run the installer for your platform to upgrade."
+        )
+        sys.exit(1)
+
+
+def _check_system_tool(cmd_candidates: list) -> bool:
+    """Try each candidate command; return True if any succeeds."""
+    for cmd in cmd_candidates:
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+            return True
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+    return False
+
+
+def _check_python_package(package: str) -> bool:
+    try:
+        importlib.import_module(package)
+        return True
+    except ImportError:
+        return False
+
+
+def _installer_hint() -> str:
+    import platform
+    os_name = platform.system()
+    if os_name == "Windows":
+        return "  Run:  install_windows.bat"
+    elif os_name == "Darwin":
+        return "  Run:  bash install_macos.sh"
+    else:
+        return "  Run:  bash install_linux.sh"
+
+
+def check_dependencies():
+    """Verify all required tools and packages are present before launching the GUI."""
+    _check_python_version()
+
+    missing = []
+
+    # System binaries — each entry is a list of candidate commands to try
+    system_tools = [
+        (
+            "tesseract  (OCR engine)",
+            [["tesseract", "--version"]],
+        ),
+        (
+            "ghostscript  (PDF engine)",
+            [["gs", "--version"], ["gswin64c", "--version"], ["gswin32c", "--version"]],
+        ),
+        (
+            "poppler / pdftoppm  (PDF-to-image, required by pdf2image)",
+            [["pdftoppm", "-v"], ["pdftoppm", "--version"]],
+        ),
+    ]
+    for label, candidates in system_tools:
+        if not any(_check_system_tool([cmd]) for cmd in candidates):
+            missing.append(label)
+
+    # Python packages  (import name → pip install name)
+    pkg_map = {
+        "ocrmypdf":   "ocrmypdf",
+        "pytesseract": "pytesseract",
+        "PIL":        "Pillow",
+        "pdf2image":  "pdf2image",
+    }
+    for import_name, install_name in pkg_map.items():
+        if not _check_python_package(import_name):
+            missing.append(f"Python package '{install_name}'")
+
+    if missing:
+        lines = "\n".join(f"  - {m}" for m in missing)
+        print(
+            "\n" + "=" * 62 + "\n"
+                              "  Missing dependencies detected:\n\n"
+                              f"{lines}\n\n"
+                              "  Please run the installer for your platform:\n"
+                              f"{_installer_hint()}\n"
+            + "=" * 62 + "\n"
+        )
+        sys.exit(1)
+
+
+check_dependencies()
+
+# ── Main imports (safe after dependency check) ────────────────────────────────
+
 import os
 import re
 import ocrmypdf
@@ -652,7 +761,7 @@ class ImageToPDFApp:
         if date:
             parts.append(date)
 
-        filename = "_".join(clean(p) for p in parts)
+        filename = " ".join(clean(p) for p in parts)
         self.log(f"  📄 Generated filename: {filename}.pdf")
         return filename
 
