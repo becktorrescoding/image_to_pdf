@@ -162,7 +162,7 @@ python image_to_pdf.py
 
 ## Screenshots
 
-![screenshot.png](screenshot.png)
+![img.png](img.png)
 
 ### Main Interface
 The application features a clean, intuitive interface:
