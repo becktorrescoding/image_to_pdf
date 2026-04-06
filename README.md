@@ -1,6 +1,6 @@
 # Image to PDF Converter & OCR Search Tool
 
-A Python GUI application that combines OCR-based document search with image-to-PDF conversion capabilities. Built to help universities digitise and manage pre-digital era scanned transcripts and degrees. Features an intuitive graphical interface with two operation modes: search through image files and PDFs using Optical Character Recognition (OCR) to find specific documents, or bulk convert entire folders of images to searchable PDFs — all without needing to edit code.
+A Python GUI application that combines OCR-based document search with image-to-PDF conversion capabilities. Built to help universities digitize and manage pre-digital era scanned transcripts and degrees. Features an intuitive graphical interface with two operation modes: search through image files and PDFs using Optical Character Recognition (OCR) to find specific documents, or bulk convert entire folders of images to searchable PDFs — all without needing to edit code.
 
 ## Features
 
@@ -31,6 +31,10 @@ A Python GUI application that combines OCR-based document search with image-to-P
 ---
 
 ## Installation
+
+#### Below is the manual installation method. Use the dedicated platform installer before attempting to install dependencies manually.
+
+---
 
 ### 1. Clone or Download this Repository
 
@@ -398,10 +402,10 @@ Example: `Smith_John_A_Transcript_March_3_1975.pdf`
 2. Extracts the student name — handles both `Last, First MI` and `First MI Last` formats
 3. For degrees: extracts the degree name from the text following `"Degree Received"` and the graduation date to its right
 4. For transcripts: extracts the admission date from the text following `"Date of Admission"`
-5. Normalises dates to a consistent `Month_DD_YYYY` format regardless of how they appear in the document — both `June 12, 1979` and `06/12/79` will produce `June_12_1979`. 2-digit years are expanded automatically (`79` → `1979`, years `00–19` are assumed to be 2000s)
+5. Normalizes dates to a consistent `Month_DD_YYYY` format regardless of how they appear in the document — both `June 12, 1979` and `06/12/79` will produce `June_12_1979`. 2-digit years are expanded automatically (`79` → `1979`, years `00–19` are assumed to be 2000s)
 6. Assembles the parts into a clean filename, stripping invalid characters
 
-**Fallback behaviour:**
+**Fallback behavior:**
 If any field cannot be extracted, a warning is logged and the original scanned filename is used instead. This ensures conversion always completes even if the OCR output is unclear.
 
 ### Search Mode Workflow
@@ -492,25 +496,25 @@ The GUI includes comprehensive error handling:
 
 ### Common Error Messages
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| "Please select both input and output folders." | Missing folder paths | Browse and select both folders |
-| "Please enter a name to search for." | Search Mode with empty name field | Enter a name to search |
-| "Error processing [file]" | Corrupted or unreadable image | Check image file integrity |
-| "No matching files found" | No documents contain search text | Verify spelling, try partial name |
-| Tesseract error | OCR engine not installed | Install Tesseract OCR |
+| Error                                          | Cause                             | Solution                          |
+|------------------------------------------------|-----------------------------------|-----------------------------------|
+| "Please select both input and output folders." | Missing folder paths              | Browse and select both folders    |
+| "Please enter a name to search for."           | Search Mode with empty name field | Enter a name to search            |
+| "Error processing [file]"                      | Corrupted or unreadable image     | Check image file integrity        |
+| "No matching files found"                      | No documents contain search text  | Verify spelling, try partial name |
+| Tesseract error                                | OCR engine not installed          | Install Tesseract OCR             |
 
 ## Privacy & Data Security
 
 All processing is performed **entirely locally on your machine**. No files, text, or metadata are transmitted over the internet at any point.
 
-| Dependency | Data Collection | Network Access |
-|------------|----------------|----------------|
-| Tesseract OCR | None | None — fully offline |
-| OCRmyPDF | None | None — fully offline |
-| Pillow | None | None — fully offline |
-| pdf2image / Poppler | None | None — fully offline |
-| tkinter | None | None — fully offline |
+| Dependency          | Data Collection | Network Access       |
+|---------------------|-----------------|----------------------|
+| Tesseract OCR       | None            | None — fully offline |
+| OCRmyPDF            | None            | None — fully offline |
+| Pillow              | None            | None — fully offline |
+| pdf2image / Poppler | None            | None — fully offline |
+| tkinter             | None            | None — fully offline |
 
 This makes the tool suitable for handling sensitive documents such as university transcripts and degrees, where student records should remain confidential and within your institution's systems.
 
